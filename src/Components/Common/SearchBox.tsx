@@ -1,72 +1,47 @@
-import React, { ChangeEvent } from 'react';
-import { Theme, InputBase } from '@material-ui/core';
-import { makeStyles, withStyles, createStyles } from '@material-ui/core/styles';
+import { TextFieldProps } from '@material-ui/core';
+import { debounce } from "lodash";
+import React, { useCallback, useState } from 'react';
 
-const useStyles = makeStyles(theme => ({
-    root: {
-        flexGrow: 1,
-        marginTop: '10px'
-    },
-    card: {
-        width: 300,
-        height: 120,
-        backgroundColor: '#C4C4C4',
-        margin: theme.spacing(1),
-    },
-    title: {
-        fontSize: 14,
-    },
-    spacing: {
-        marginLeft: theme.spacing(1),
-    },
-    margin: {
-        margin: theme.spacing(1),
-    }
-}));
 
-const BootstrapInput = withStyles((theme: Theme) =>
-    createStyles({
-        root: {
-            'label + &': {
-                marginTop: theme.spacing(3),
-            },
-        },
-        input: {
-            borderRadius: 4,
-            position: 'relative',
-            backgroundColor: theme.palette.common.white,
-            border: '1px solid #ced4da', 
-            width: '100%',
-            maxWidth:300,
-            height: 20,
-            padding: '10px 12px', 
-            transition: theme.transitions.create(['border-color', 'box-shadow']), 
-        },
-    }),
-)(InputBase);
 
-interface SearchBoxProps {
-    placeholder: string;
-    value: string;
-    handleSearch: (
-        e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-    ) => void
-}
-const SearchBox = (props: SearchBoxProps) => {
+type TextFieldPropsExtended = TextFieldProps & { errors: string, search: (value: string) => void }
 
-    const classes = useStyles();
-    const { placeholder, handleSearch, value } = props;
+export const InputSearchBox = (props: TextFieldPropsExtended) => {
+    const [state, setState] = useState("")
+    const { search, placeholder } = props;
+
+    const handler = useCallback(debounce(search, 500), []);
+
+    const handleKeyDown = (event: any) => {
+        const value = event.target.value;
+        setState(value);
+        if (value.length === 0 || value.length > 2) {
+            handler(value);
+        }
+    };
+
+    const clearSearch = () => {
+        handler("");
+        setState("");
+    };
 
     return (
-        <div>
-            <BootstrapInput 
-                className={classes.margin} 
-                placeholder={placeholder}
-                value={value}
-                id="bootstrap-input" 
-                onChange={handleSearch} />
+        <div className="md:flex sticky top-0 bg-gray-100 border-b border-gray-200 py-3 px-3 md:px-8 z-20">
+            <div className="relative rounded-md shadow-sm max-w-sm w-full">
+                {state ?
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none cursor-pointer" onClick={clearSearch} >
+                        <span className="text-gray-500 sm:text-sm sm:leading-5" >
+                            <i className="fas fa-times text-md " ></i>
+                        </span>
+                    </div> :
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-gray-500 sm:text-sm sm:leading-5" >
+                            <i className="fas fa-search text-md "></i>
+                        </span>
+                    </div>
+                }
+                <input name="search" type="text" value={state} placeholder={placeholder} onChange={handleKeyDown} className="form-input block w-full pl-8 pr-3 sm:text-sm sm:leading-5" />
+            </div>
         </div>
     )
-};
-
-export default SearchBox;
+}

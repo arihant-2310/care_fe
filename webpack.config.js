@@ -37,7 +37,7 @@ module.exports = (env, argv) => {
             port: 4000,
             proxy: {
                 '/api': {
-                    target: 'https://dev.care.coronasafe.in/',
+                    target: 'https://careapi.coronasafe.in/',
                     changeOrigin: true,
                 }
             },
@@ -58,6 +58,7 @@ module.exports = (env, argv) => {
                     use: [MiniCssExtractPlugin.loader,
                         'css-loader',
                         'sass-loader',
+                        'postcss-loader'
                     ]
                 },
                 {

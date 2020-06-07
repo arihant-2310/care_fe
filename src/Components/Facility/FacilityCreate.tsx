@@ -1,410 +1,526 @@
-import React, { useState, useReducer, useCallback } from "react"
-import { useDispatch } from "react-redux"
-import { FormControl, Grid, Card, CardHeader, CardContent, Button, InputLabel, Select, MenuItem, CardActions } from "@material-ui/core"
-import { TextInputField, MultilineInputField } from "../Common/HelperInputFields"
+import { Button, Card, CardContent, CircularProgress, InputLabel, IconButton } from "@material-ui/core";
+import Popover from "@material-ui/core/Popover";
+import CheckCircleOutlineIcon from '@material-ui/icons/CheckCircleOutline';
+import MyLocationIcon from "@material-ui/icons/MyLocation";
 import { makeStyles } from "@material-ui/styles";
-import { navigate } from 'hookrouter';
-import { createFacility, getFacility, updateFacility } from "../../Redux/actions";
-import { validateLocationCoordinates, phonePreg } from "../../Common/validation";
-import { DISTRICT_CHOICES } from "../../Common/constants";
-import SaveIcon from '@material-ui/icons/Save';
-import { FACILITY_ID } from "../../Common/constants";
+import { navigate } from "hookrouter";
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import React, { useCallback, useReducer, useState } from "react";
+import { useDispatch } from "react-redux";
+import { FACILITY_TYPES } from "../../Common/constants";
+import { statusType, useAbortableEffect } from "../../Common/utils";
+import { validateLocationCoordinates } from "../../Common/validation";
+import { createFacility, getDistrictByState, getFacility, getLocalbodyByDistrict, getStates, updateFacility } from "../../Redux/actions";
+import * as Notification from "../../Utils/Notifications.js";
+import { MultilineInputField, PhoneNumberField, SelectField, TextInputField } from "../Common/HelperInputFields";
 import { Loading } from "../Common/Loading";
-import Popover from '@material-ui/core/Popover';
-import MyLocationIcon from '@material-ui/icons/MyLocation';
-import { LocationSearchAndPick } from "../Common/LocationSearchAndPick"
-import { useAbortableEffect, statusType } from '../../Common/utils';
-import * as Notification from '../../Utils/Notifications.js';
+import { LocationSearchAndPick } from "../Common/LocationSearchAndPick";
+import PageTitle from "../Common/PageTitle";
 
-const DEFAULT_MAP_LOCATION = [10.038394700000001, 76.5074145180173];// Ernakulam
+const DEFAULT_MAP_LOCATION = [10.038394700000001, 76.5074145180173]; // Ernakulam
 
 interface FacilityProps {
-    facilityId?: number;
+  facilityId?: number;
 }
+
+const facilityTypes = [...FACILITY_TYPES.map(i => i.text)];
+const initialStates = [{ id: 0, name: "Choose State *" }];
+const initialDistricts = [{ id: 0, name: "Choose District" }];
+const selectStates = [{ id: 0, name: "Please select your state" }];
+const initialLocalbodies = [{ id: 0, name: "Choose Localbody" }];
+const selectDistrict = [{ id: 0, name: "Please select your district" }];
 
 const initForm: any = {
-    name: "",
-    district: "",
-    address: "",
-    phone_number: "",
-    latitude: "",
-    longitude: "",
-    oxygen_capacity: "",
+  facility_type: "2",
+  name: "",
+  state: "",
+  district: "",
+  local_body: "",
+  address: "",
+  phone_number: "",
+  latitude: "",
+  longitude: "",
+  oxygen_capacity: ""
 };
+
+const initError = Object.assign({}, ...Object.keys(initForm).map(k => ({ [k]: "" })));
 
 const initialState = {
-    form: { ...initForm },
-    errors: { ...initForm }
+  form: { ...initForm },
+  errors: { ...initError }
 };
 
-const useStyles = makeStyles(theme => ({
-    formTop: {
-        marginTop: '100px',
-    },
-    locationIcon: {
-        marginLeft: "10px",
-        marginTop: "15px",
-        cursor: 'pointer',
-    },
-    pdLogo: {
-        height: '345px',
-        border: 'solid 3px white'
-    },
-    selectEmpty: {
-        marginTop: "10px",
-    },
-    selectLabel: {
-        background: 'white',
-        padding: '0px 10px'
-    }
-}));
-
 const facility_create_reducer = (state = initialState, action: any) => {
-
-    switch (action.type) {
-        case "set_form": {
-            return {
-                ...state,
-                form: action.form
-            }
-        }
-        case "set_error": {
-            return {
-                ...state,
-                errors: action.errors
-            }
-        }
-        default:
-            return state
+  switch (action.type) {
+    case "set_form": {
+      return {
+        ...state,
+        form: action.form
+      };
     }
-}
+    case "set_error": {
+      return {
+        ...state,
+        errors: action.errors
+      };
+    }
+    default:
+      return state;
+  }
+};
+
+const goBack = () => {
+  window.history.go(-1);
+};
 
 export const FacilityCreate = (props: FacilityProps) => {
-    const dispatchAction: any = useDispatch()
-    const classes = useStyles();
-    const { facilityId } = props;
+  const dispatchAction: any = useDispatch();
+  const { facilityId } = props;
 
-    const [state, dispatch] = useReducer(facility_create_reducer, initialState);
-    const [isLoading, setIsLoading] = useState(false);
-    const [anchorEl, setAnchorEl] = React.useState<EventTarget & Element | null>(null);
-    const [mapLoadLocation, setMapLoadLocation] = useState(DEFAULT_MAP_LOCATION);
+  const [state, dispatch] = useReducer(facility_create_reducer, initialState);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isStateLoading, setIsStateLoading] = useState(false);
+  const [isDistrictLoading, setIsDistrictLoading] = useState(false);
+  const [isLocalbodyLoading, setIsLocalbodyLoading] = useState(false);
+  const [states, setStates] = useState(initialStates);
+  const [districts, setDistricts] = useState(selectStates);
+  const [localBody, setLocalBody] = useState(selectDistrict);
 
-    const headerText = !facilityId ? "Create Facility" : "Update Facility";
-    const buttonText = !facilityId ? "Save" : "Update";
+  const [anchorEl, setAnchorEl] = React.useState<
+    (EventTarget & Element) | null
+  >(null);
+  const [mapLoadLocation, setMapLoadLocation] = useState(DEFAULT_MAP_LOCATION);
 
-    const fetchData = useCallback(async (status: statusType) => {
-        if (facilityId) {
-            setIsLoading(true);
-            const res = await dispatchAction(getFacility(facilityId));
-            if (!status.aborted && res.data) {
-                const formData = {
-                    name: res.data.name,
-                    district: res.data.district,
-                    address: res.data.address,
-                    phone_number: res.data.phone_number,
-                    latitude: res.data.location ? res.data.location.latitude : "",
-                    longitude: res.data.location ? res.data.location.longitude : "",
-                    oxygen_capacity: res.data.oxygen_capacity ? res.data.oxygen_capacity : "",
-                };
-                dispatch({ type: "set_form", form: formData })
-            } else {
-                navigate(`/facility/${facilityId}`);
-            }
-            setIsLoading(false);
-        }
-    }, [dispatchAction, facilityId]);
+  const headerText = !facilityId ? "Create Facility" : "Update Facility";
+  const buttonText = !facilityId ? "Save Facility" : "Update Facility";
 
-    useAbortableEffect((status: statusType) => {
-        fetchData(status);
-    }, [dispatch, fetchData]);
+  const fetchDistricts = useCallback(
+    async (id: string) => {
+      if (Number(id) > 0) {
+        setIsDistrictLoading(true);
+        const districtList = await dispatchAction(getDistrictByState({ id }));
+        setDistricts([...initialDistricts, ...districtList.data]);
+        setIsDistrictLoading(false);
+      } else {
+        setDistricts(selectStates);
+      }
+    },
+    [dispatchAction]
+  );
 
-    const handleCancel = (e: any) => {
-        const form = { ...initForm };
-        dispatch({ type: "set_form", form })
-        if (facilityId) {
-            navigate(`/facility/${facilityId}`);
+  const fetchLocalBody = useCallback(
+    async (id: string) => {
+      if (Number(id) > 0) {
+        setIsLocalbodyLoading(true);
+        const localBodyList = await dispatchAction(
+          getLocalbodyByDistrict({ id })
+        );
+        setIsLocalbodyLoading(false);
+        setLocalBody([...initialLocalbodies, ...localBodyList.data]);
+      } else {
+        setLocalBody(selectDistrict);
+      }
+    },
+    [dispatchAction]
+  );
+
+  const fetchData = useCallback(
+    async (status: statusType) => {
+      if (facilityId) {
+        setIsLoading(true);
+        const res = await dispatchAction(getFacility(facilityId));
+        if (!status.aborted && res.data) {
+          const formData = {
+            facility_type: res.data.facility_type,
+            name: res.data.name,
+            state: res.data.state ? res.data.state : "",
+            district: res.data.district ? res.data.district : "",
+            local_body: res.data.local_body ? res.data.local_body : "",
+            address: res.data.address,
+            phone_number: res.data.phone_number,
+            latitude: res.data.location ? res.data.location.latitude : "",
+            longitude: res.data.location ? res.data.location.longitude : "",
+            oxygen_capacity: res.data.oxygen_capacity
+              ? res.data.oxygen_capacity
+              : ""
+          };
+          dispatch({ type: "set_form", form: formData });
+          Promise.all([
+            fetchDistricts(res.data.state),
+            fetchLocalBody(res.data.district)
+          ]);
         } else {
-            navigate('/facility');
+          navigate(`/facility/${facilityId}`);
         }
-    };
+        setIsLoading(false);
+      }
+    },
+    [dispatchAction, facilityId, fetchDistricts, fetchLocalBody]
+  );
 
-    const handleChange = (e: any) => {
-        let form = { ...state.form }
-        form[e.target.name] = e.target.value
-        dispatch({ type: "set_form", form })
-    }
+  const fetchStates = useCallback(
+    async (status: statusType) => {
+      setIsStateLoading(true);
+      const statesRes = await dispatchAction(getStates());
+      if (!status.aborted && statesRes.data.results) {
+        setStates([...initialStates, ...statesRes.data.results]);
+      }
+      setIsStateLoading(false);
+    },
+    [dispatchAction]
+  );
 
-    const handleClickLocationPicker = (event: React.MouseEvent) => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((position) => {
-                setMapLoadLocation([position.coords.latitude, position.coords.longitude]);
-                const form = { ...state.form };
-                form['latitude'] = position.coords.latitude;
-                form['longitude'] = position.coords.longitude;
-                dispatch({ type: "set_form", form });
-            });
-        }
+  useAbortableEffect(
+    (status: statusType) => {
+      if (facilityId) {
+        fetchData(status);
+      }
+      fetchStates(status);
+    },
+    [dispatch, fetchData]
+  );
 
-        setAnchorEl(event.currentTarget);
-    };
+  const handleChange = (e: any) => {
+    let form = { ...state.form };
+    form[e.target.name] = e.target.value;
+    dispatch({ type: "set_form", form });
+  };
 
-    const handleClose = () => {
-        setAnchorEl(null);
-    };
+  const handleValueChange = (value: any, name: string) => {
+    const form = { ...state.form };
+    form[name] = value;
+    dispatch({ type: "set_form", form });
+  };
 
-
-    const validateForm = () => {
-        let errors = { ...initForm }
-        let invalidForm = false
-        Object.keys(state.form).forEach(field => {
-            if (!state.form[field] && (field === "name" || field === "district" || field === "address")) {
-                errors[field] = "Field is required";
-                invalidForm = true;
-            } else if (field === "phone_number" && !phonePreg(state.form.phone_number)) {
-                errors[field] = "Please Enter 10/11 digit mobile number or landline as 0<std code><phone number>";
-                invalidForm = true;
-            } else if (state.form[field] && (field === "latitude" || field === "longitude") && !validateLocationCoordinates(state.form[field])) {
-                errors[field] = "Please enter valid coordinates";
-                invalidForm = true;
-            }
-        });
-        if (invalidForm) {
-            dispatch({ type: "set_error", errors })
-            return false
-        }
-        dispatch({ type: "set_error", errors })
-        return true
-    }
-
-    const handleSubmit = async (e: any) => {
-        e.preventDefault()
-        const validated = validateForm();
-        if (validated) {
-            setIsLoading(true);
-            const data = {
-                facility_type: FACILITY_ID.hospital,
-                name: state.form.name,
-                district: state.form.district,
-                address: state.form.address,
-                location: state.form.latitude && state.form.latitude ? {
-                    latitude: Number(state.form.latitude),
-                    longitude: Number(state.form.latitude),
-                } : undefined,
-                phone_number: state.form.phone_number,
-                oxygen_capacity: state.form.oxygen_capacity ? Number(state.form.oxygen_capacity) : 0,
-            }
-            const res = await dispatchAction(facilityId ? updateFacility(facilityId, data) : createFacility(data));
-            if (res && res.data) {
-                const id = res.data.id;
-                setIsLoading(false);
-                dispatch({ type: "set_form", form: initForm });
-                if (!facilityId) {
-                    Notification.Success({
-                        msg: "Facility added successfully"
-                    })
-                    navigate(`/facility/${id}/bed`);
-                } else {
-                    Notification.Success({
-                        msg: "Facility updated successfully"
-                    });
-                    navigate(`/facility/${facilityId}`);
-                }
-            }
-        }
-    }
-
-
-    const handleLocationSelect = (location: any) => {
+  const handleClickLocationPicker = (event: React.MouseEvent) => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(position => {
+        setMapLoadLocation([
+          position.coords.latitude,
+          position.coords.longitude
+        ]);
         const form = { ...state.form };
-        const latitude = parseFloat(location.lat);
-        const longitude = parseFloat(location.lon);
-        form['latitude'] = latitude;
-        form['longitude'] = longitude;
+        form["latitude"] = position.coords.latitude;
+        form["longitude"] = position.coords.longitude;
         dispatch({ type: "set_form", form });
-        setMapLoadLocation([latitude, longitude]);
+      });
     }
 
-    if (isLoading) {
-        return <Loading />
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const validateForm = () => {
+    let errors = { ...initError };
+    let invalidForm = false;
+    Object.keys(state.form).forEach(field => {
+      switch (field) {
+        case "name":
+        case "district":
+        case "address":
+        case "state":
+          if (!state.form[field]) {
+            errors[field] = "Field is required";
+            invalidForm = true;
+          }
+          return;
+        case "phone_number":
+          const phoneNumber = parsePhoneNumberFromString(state.form[field]);
+          if (!state.form[field] || !phoneNumber?.isPossible()) {
+            errors[field] = "Please enter valid phone number";
+            invalidForm = true;
+          }
+          return;
+        case "latitude":
+        case "longitude":
+          if (!!state.form.latitude && !!state.form.longitude && !validateLocationCoordinates(state.form[field])) {
+            errors[field] = "Please enter valid coordinates";
+            invalidForm = true;
+          }
+          return;
+        default:
+          return;
+      }
+    });
+    if (invalidForm) {
+      dispatch({ type: "set_error", errors });
+      return false;
     }
-    const open = Boolean(anchorEl);
-    const id = open ? 'map-popover' : undefined;
-    return <div>
-        <Grid container alignContent="center" justify="center">
-            <Grid item xs={12} sm={10} md={8} lg={6} xl={4}>
-                <Card style={{ marginTop: '20px' }}>
-                    <CardHeader title={headerText} />
-                    <form onSubmit={(e) => handleSubmit(e)}>
-                        <CardContent>
-                            <Grid container justify="center" style={{ marginBottom: '10px' }}>
-                                <Grid item xs={12}>
-                                    <TextInputField
-                                        fullWidth
-                                        name="name"
-                                        label="Hospital Name*"
-                                        placeholder=""
-                                        variant="outlined"
-                                        margin="dense"
-                                        value={state.form.name}
-                                        onChange={handleChange}
-                                        errors={state.errors.name}
-                                    />
-                                </Grid>
-                            </Grid>
+    dispatch({ type: "set_error", errors });
+    return true;
+  };
 
-                            <Grid container justify="center" >
-                                <Grid item xs={12}>
-                                    <FormControl fullWidth variant="outlined">
-                                        <InputLabel id="demo-simple-select-outlined-label" className={classes.selectLabel} >Pick Your District*</InputLabel>
-                                        <Select
-                                            fullWidth
-                                            labelId="demo-simple-select-outlined-label"
-                                            id="demo-simple-select-outlined"
-                                            name="district"
-                                            value={state.form.district}
-                                            onChange={handleChange}
-                                            label="District"
-                                        >
-                                            <MenuItem value="">
-                                                <em>None</em>
-                                            </MenuItem>
-                                            {DISTRICT_CHOICES.map(district => {
-                                                return <MenuItem key={district.id.toString()} value={district.id}>{district.text}</MenuItem>
-                                            })}
-                                        </Select>
-                                        <span className="error-text">{state.errors.district}</span>
-                                    </FormControl>
-                                </Grid>
-                            </Grid>
+  const handleSubmit = async (e: any) => {
+    e.preventDefault();
+    const validated = validateForm();
+    if (validated) {
+      setIsLoading(true);
+      const data = {
+        facility_type: state.form.facility_type,
+        name: state.form.name,
+        district: state.form.district,
+        state: state.form.state,
+        address: state.form.address,
+        local_body: state.form.local_body,
+        location:
+          state.form.latitude && state.form.longitude
+            ? {
+              latitude: Number(state.form.latitude),
+              longitude: Number(state.form.longitude)
+            }
+            : undefined,
+        phone_number: parsePhoneNumberFromString(state.form.phone_number)?.format('E.164'),
+        oxygen_capacity: state.form.oxygen_capacity
+          ? Number(state.form.oxygen_capacity)
+          : 0
+      };
+      const res = await dispatchAction(
+        facilityId ? updateFacility(facilityId, data) : createFacility(data)
+      );
+      if (res && res.data) {
+        const id = res.data.id;
+        dispatch({ type: "set_form", form: initForm });
+        if (!facilityId) {
+          Notification.Success({
+            msg: "Facility added successfully"
+          });
+          navigate(`/facility/${id}/bed`);
+        } else {
+          Notification.Success({
+            msg: "Facility updated successfully"
+          });
+          navigate(`/facility/${facilityId}`);
+        }
+      }
+      setIsLoading(false);
+    }
+  };
 
-                            <Grid container justify="center" >
-                                <Grid item xs={12}>
-                                    <MultilineInputField
-                                        rows={5}
-                                        name="address"
-                                        label="Hospital Address*"
-                                        placeholder=""
-                                        variant="outlined"
-                                        margin="dense"
-                                        value={state.form.address}
-                                        onChange={handleChange}
-                                        errors={state.errors.address}
-                                    />
-                                </Grid>
-                            </Grid>
+  const handleLocationSelect = (location: any) => {
+    const form = { ...state.form };
+    const latitude = parseFloat(location.lat);
+    const longitude = parseFloat(location.lon);
+    form["latitude"] = latitude;
+    form["longitude"] = longitude;
+    dispatch({ type: "set_form", form });
+    setMapLoadLocation([latitude, longitude]);
+  };
 
-                            <Grid container justify="center" >
-                                <Grid item xs={12}>
-                                    <TextInputField
-                                        name="phone_number"
-                                        label="Emergency Contact Number*"
-                                        type="number"
-                                        placeholder=""
-                                        variant="outlined"
-                                        margin="dense"
-                                        value={state.form.phone_number}
-                                        onChange={handleChange}
-                                        errors={state.errors.phone_number}
-                                        inputProps={{ maxLength: 11 }}
-                                    />
-                                </Grid>
-                            </Grid>
+  if (isLoading) {
+    return <Loading />;
+  }
+  const open = Boolean(anchorEl);
+  const id = open ? "map-popover" : undefined;
+  return (
+    <div>
+      <PageTitle title={headerText} />
+      <Card className="mt-4">
+        <CardContent>
+          <form onSubmit={e => handleSubmit(e)}>
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
 
-                            <Grid container justify="center" >
-                                <Grid item xs={12}>
-                                    <TextInputField
-                                        name="oxygen_capacity"
-                                        label="Oxygen Capacity in liters"
-                                        type="number"
-                                        placeholder="Oxygen Capacity in liters"
-                                        variant="outlined"
-                                        margin="dense"
-                                        value={state.form.oxygen_capacity}
-                                        onChange={handleChange}
-                                        errors={state.errors.oxygen_capacity}
-                                    />
-                                </Grid>
-                            </Grid>
+              <div>
+                <InputLabel id="facility_type-label">Facility Type*</InputLabel>
+                <SelectField
+                  name="facility_type"
+                  variant="outlined"
+                  margin="dense"
+                  optionArray={true}
+                  value={state.form.facility_type}
+                  options={facilityTypes}
+                  onChange={handleChange}
+                  errors={state.errors.facility_type}
+                />
+              </div>
 
-                            <Grid container >
-                                <Grid item xs={5}>
-                                    <TextInputField
-                                        name="latitude"
-                                        label="Latitude"
-                                        placeholder=""
-                                        variant="outlined"
-                                        margin="dense"
-                                        value={state.form.latitude}
-                                        onChange={handleChange}
-                                        errors={state.errors.latitude}
-                                    />
+              <div>
+                <InputLabel id="name-label">Facility Name*</InputLabel>
+                <TextInputField
+                  fullWidth
+                  name="name"
+                  placeholder=""
+                  variant="outlined"
+                  margin="dense"
+                  value={state.form.name}
+                  onChange={handleChange}
+                  errors={state.errors.name}
+                />
+              </div>
 
-                                </Grid>
-                                <Grid item xs={1}></Grid>
-                                <Grid item xs={5}>
-                                    <TextInputField
-                                        name="longitude"
-                                        label="Longitude"
-                                        placeholder=""
-                                        variant="outlined"
-                                        margin="dense"
-                                        value={state.form.longitude}
-                                        onChange={handleChange}
-                                        errors={state.errors.longitude}
-                                    />
-                                </Grid>
-                                <Grid item xs={1} >
-                                    <div className={classes.locationIcon} onClick={handleClickLocationPicker}>
-                                        <MyLocationIcon />
-                                    </div>
-                                </Grid>
-                                {
-                                    <Popover
-                                        id={id}
-                                        open={open}
-                                        anchorEl={anchorEl}
-                                        onClose={handleClose}
-                                        anchorOrigin={{
-                                            horizontal: 'right',
-                                            vertical: 'bottom',
-                                        }}
-                                        transformOrigin={{
-                                            horizontal: 'right',
-                                            vertical: 'top',
-                                        }}
-                                        style={{ position: 'absolute', left: '300px' }}
-                                    >
-                                        <LocationSearchAndPick
-                                            latitude= {mapLoadLocation[0]}
-                                            longitude = {mapLoadLocation[1]}
-                                            onSelectLocation={handleLocationSelect}
-                                        />
-                                    </Popover>
-                                }
+              <div>
+                <InputLabel id="gender-label">State*</InputLabel>
+                {isStateLoading ? (
+                  <CircularProgress size={20} />
+                ) : (
+                    <SelectField
+                      name="state"
+                      variant="outlined"
+                      margin="dense"
+                      value={state.form.state}
+                      options={states}
+                      optionValue="name"
+                      onChange={e => [
+                        handleChange(e),
+                        fetchDistricts(String(e.target.value))
+                      ]}
+                      errors={state.errors.state}
+                    />
+                  )}
+              </div>
 
-                            </Grid>
-                        </CardContent>
+              <div>
+                <InputLabel id="district-label">District*</InputLabel>
+                {isDistrictLoading ? (
+                  <CircularProgress size={20} />
+                ) : (
+                    <SelectField
+                      name="district"
+                      variant="outlined"
+                      margin="dense"
+                      value={state.form.district}
+                      options={districts}
+                      optionValue="name"
+                      onChange={e => [
+                        handleChange(e),
+                        fetchLocalBody(String(e.target.value))
+                      ]}
+                      errors={state.errors.district}
+                    />
+                  )}
+              </div>
 
-                        <CardContent>
-                            <CardActions className="padding16" style={{ justifyContent: "space-between" }}>
-                                <Button
-                                    color="default"
-                                    variant="contained"
-                                    onClick={handleCancel}
-                                >Cancel</Button>
-                                <Button
-                                    color="primary"
-                                    variant="contained"
-                                    type="submit"
-                                    style={{ marginLeft: 'auto' }}
-                                    onClick={(e) => handleSubmit(e)}
-                                    startIcon={<SaveIcon>save</SaveIcon>}
-                                >{buttonText}</Button>
-                            </CardActions>
-                        </CardContent>
-                    </form>
-                </Card>
-            </Grid>
-        </Grid>
+              <div className="md:col-span-2">
+                <InputLabel id="local_body-label">Localbody</InputLabel>
+                {isLocalbodyLoading ? (
+                  <CircularProgress size={20} />
+                ) : (
+                    <SelectField
+                      name="local_body"
+                      variant="outlined"
+                      margin="dense"
+                      value={state.form.local_body}
+                      options={localBody}
+                      optionValue="name"
+                      onChange={handleChange}
+                      errors={state.errors.local_body}
+                    />
+                  )}
+              </div>
+
+              <div className="md:col-span-2">
+                <InputLabel id="name-label">Address*</InputLabel>
+                <MultilineInputField
+                  rows={5}
+                  name="address"
+                  placeholder=""
+                  variant="outlined"
+                  margin="dense"
+                  value={state.form.address}
+                  onChange={handleChange}
+                  errors={state.errors.address}
+                />
+              </div>
+
+              <div>
+                <PhoneNumberField
+                  label="Emergency Contact Number"
+                  value={state.form.phone_number}
+                  onChange={(value: any) => handleValueChange(value, 'phone_number')}
+                  errors={state.errors.phone_number}
+                  onlyIndia={true}
+                />
+              </div>
+              <div>
+                <InputLabel id="name-label">Oxygen Capacity in liters</InputLabel>
+                <TextInputField
+                  name="oxygen_capacity"
+                  type="number"
+                  variant="outlined"
+                  margin="dense"
+                  value={state.form.oxygen_capacity}
+                  onChange={handleChange}
+                  errors={state.errors.oxygen_capacity}
+                />
+              </div>
+            </div>
+            <div className="flex items-center mt-4 -mx-2">
+              <div className="flex-1 px-2">
+                <InputLabel id="location-label">Location</InputLabel>
+                <TextInputField
+                  name="latitude"
+                  label="Latitude"
+                  placeholder=""
+                  variant="outlined"
+                  margin="dense"
+                  value={state.form.latitude}
+                  onChange={handleChange}
+                  errors={state.errors.latitude}
+                />
+              </div>
+              <div
+                className="pt-4"
+              >
+                <IconButton onClick={handleClickLocationPicker}>
+                  <MyLocationIcon />
+                </IconButton>
+                <Popover
+                  id={id}
+                  open={open}
+                  anchorEl={anchorEl}
+                  onClose={handleClose}
+                  anchorOrigin={{
+                    vertical: 'top',
+                    horizontal: 'left',
+                  }}
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'left',
+                  }}
+                >
+                  <LocationSearchAndPick
+                    latitude={mapLoadLocation[0]}
+                    longitude={mapLoadLocation[1]}
+                    onSelectLocation={handleLocationSelect}
+                  />
+                </Popover>
+              </div>
+              <div className="flex-1 px-2">
+                <InputLabel>&nbsp;</InputLabel>
+                <TextInputField
+                  name="longitude"
+                  label="Longitude"
+                  placeholder=""
+                  variant="outlined"
+                  margin="dense"
+                  value={state.form.longitude}
+                  onChange={handleChange}
+                  errors={state.errors.longitude}
+                />
+              </div>
+            </div>
+            <div
+              className="flex justify-between mt-4"
+            >
+              <Button
+                color="default"
+                variant="contained"
+                onClick={goBack}
+              >Cancel</Button>
+              <Button
+                color="primary"
+                variant="contained"
+                type="submit"
+                style={{ marginLeft: "auto" }}
+                onClick={e => handleSubmit(e)}
+                startIcon={<CheckCircleOutlineIcon>save</CheckCircleOutlineIcon>}
+              >{buttonText}</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
-}
+  );
+};

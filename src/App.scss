@@ -1,3 +1,19 @@
+$primary: #03543f;
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #section-to-print, #section-to-print * {
+    visibility: visible;
+  }
+  #section-to-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+}
+
 .header-section {
   .appBar {
     z-index: 1201;
@@ -46,13 +62,11 @@
   }
 }
 
-
-
 .Mui-selected {
   .MuiSvgIcon-root {
     color: #0085ad !important;
   }
-  .MuiListItemText-root{
+  .MuiListItemText-root {
     color: #0085ad !important;
   }
 }
@@ -66,46 +80,17 @@
   }
   min-height: 100vh;
 }
-#root {
-  background-color: #fbfafc;
-}
-#root > div{
-  display: flex;
-min-height: 100vh;
-flex-direction: column;
-}
 .app-footer {
   width: 100%;
   background: #ffffff no-repeat;
   background-size: 100% 100%;
   min-height: 80px;
-  z-index: 10000;
+  z-index: 1202;
   display: flex;
   flex-direction: row;
   margin-top: auto;
-  @media (max-width: 768px){
+  @media (max-width: 768px) {
     flex-direction: column;
-  }
-  img {
-    height: 80px;
-    margin: 10px 10px auto auto;
-    display: block;
-    @media (max-width: 768px){
-      margin: 10px auto auto auto;
-    }
-  }
-  .copy-right {
-    width: 70%;
-    text-align: center;
-    color: black;
-    margin: auto;
-    @media (max-width: 768px){
-      width: 90%;
-      margin: 10px auto;
-    }
-    a{
-      text-decoration: none;
-    }
   }
 }
 
@@ -165,14 +150,6 @@ flex-direction: column;
 
 .pagination {
   margin: auto;
-  .current-page {
-    color: white;
-    background-color: #3f51b5;
-  }
-  .page-no {
-    color: black;
-    background-color: white;
-  }
 }
 .error-text {
   font-size: 14px;
@@ -184,37 +161,115 @@ flex-direction: column;
   padding-top: 5px;
 }
 
-.nativeSelectMod{
-  .MuiInputBase-root{
-    width:100%
+.nativeSelectMod {
+  .MuiInputBase-root {
+    width: 100%;
   }
 }
 
 .care-secondary-color {
-    color: #3f51b5;
+  color: #3f51b5;
 }
 
-
-.hometext{
-  margin: 10px 35px!important;
-  @media (max-width: 768px){
-    margin: 10px 15px!important;
+.hometext {
+  margin: 10px 35px !important;
+  @media (max-width: 768px) {
+    margin: 10px 15px !important;
   }
 }
 
-.MuiCardHeader-title{
+.MuiCardHeader-title {
   text-align: center;
 }
 
-.hometitle{
-  @media (min-width: 768px){
-    margin-top: 15px!important;
+.hometitle {
+  @media (min-width: 768px) {
+    margin-top: 15px !important;
   }
 }
 
 .MuiTypography-h6 {
-  font-weight: 400!important;
-  @media (max-width: 768px){
-    font-size: 1.10rem!important;
+  font-weight: 400 !important;
+  @media (max-width: 768px) {
+    font-size: 1.1rem !important;
   }
+}
+.badge {
+  display: inline-block;
+  padding: 0.25em 0.4em;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 0.25rem;
+  transition: color 0.15s;
+}
+
+.badge-pill {
+  padding-right: 0.6em;
+  padding-left: 0.6em;
+  border-radius: 10rem;
+}
+
+.badge-primary {
+  color: #fff;
+  background-color: #007bff;
+}
+
+.badge-secondary {
+  color: #fff;
+  background-color: #6c757d;
+}
+
+.badge-success {
+  color: #fff;
+  background-color: #28a745;
+}
+
+.badge-warning {
+  color: #212529;
+  background-color: #ffc107;
+}
+
+.badge-danger {
+  color: #fff;
+  background-color: #dc3545;
+}
+
+.badge-dark {
+  color: #fff;
+  background-color: #343a40;
+}
+
+// logout drop-down
+
+.dropdown:hover .dropdown-menu {
+  display: block;
+}
+
+.border-primary {
+  border-color: $primary;
+}
+
+// Phone number styles
+
+.react-tel-input .form-control + div:before {
+  content: "";
+}
+
+.react-tel-input {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  .form-control {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    width: 100%;
+    border-radius: 4px;
+    &:focus {
+      border-color: $primary;
+      box-shadow: 0 0 0 1px $primary;
+    }
   }
+}

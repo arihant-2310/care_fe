@@ -1,10 +1,10 @@
-import React, { useState } from "react";
-import { Box, Button, Card, CardActions, CardContent, CardHeader, Checkbox, Grid, Typography } from "@material-ui/core";
-import { ErrorHelperText, NativeSelectField, TextInputField, CheckboxField } from "../Common/HelperInputFields";
-import { DISTRICT_CHOICES, VEHICLE_TYPES } from "../../Common/constants";
-import { isEmpty } from "lodash";
+import { Box, Button, Card, CardActions, CardContent, CardHeader, Grid, Typography } from "@material-ui/core";
 import NavigateNextIcon from '@material-ui/icons/NavigateNext';
-import { phonePreg } from "../../Common/validation";
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import { isEmpty } from "lodash";
+import React, { useState } from "react";
+import { DISTRICT_CHOICES, VEHICLE_TYPES } from "../../Common/constants";
+import { CheckboxField, ErrorHelperText, NativeSelectField, PhoneNumberField, TextInputField } from "../Common/HelperInputFields";
 
 export interface vehicleForm {
     registrationNumber: string;
@@ -105,6 +105,12 @@ export const VehicleDetailsForm = (props: any) => {
         setForm(fieldValue);
     };
 
+    const handleValueChange = (value: any, name: string) => {
+        const formOld = { ...form };
+        formOld[name] = value;
+        setForm(formOld);
+    };
+
     const validateData = () => {
         const err: any = {};
         Object.keys(form).forEach(key => {
@@ -113,15 +119,14 @@ export const VehicleDetailsForm = (props: any) => {
                 case "registrationNumber":
                     if (!value) {
                         err[key] = "This field is required";
-                    } else if (value && !(/^[a-zA-Z]{2}[0-9]{1,2}[a-zA-Z]{1,2}[0-9]{1,4}$/.test(value))) {
+                    } else if (value && !(/^[a-zA-Z]{2}[0-9]{0,2}[a-zA-Z]{0,2}[0-9]{1,4}$/.test(value))) {
                         err[key] = "Please Enter the vehicle number without spaces, eg: KL13AB1234";
                     }
                     break;
                 case "ownerPhoneNumber":
-                    if (!value) {
-                        err[key] = "This field is required";
-                    } else if (value && !phonePreg(form[key])) {
-                        err[key] = "Please Enter 10/11 digit mobile number or landline as 0<std code><phone number>";
+                    const phoneNumber = parsePhoneNumberFromString(value);
+                    if (!value || !phoneNumber?.isPossible()) {
+                        err[key] = "Please enter valid phone number";
                     }
                     break;
                 case "insuranceValidTill":
@@ -237,18 +242,11 @@ export const VehicleDetailsForm = (props: any) => {
                                         onChange={handleChange}
                                         errors={errors.nameOfOwner}
                                     />
-                                    <TextInputField
+                                    <PhoneNumberField
                                         label="Owner phone number"
-                                        name="ownerPhoneNumber"
-                                        type="number"
-                                        placeholder=""
-                                        variant="outlined"
-                                        margin="dense"
                                         value={form.ownerPhoneNumber}
-                                        InputLabelProps={{ shrink: !!form.ownerPhoneNumber }}
-                                        onChange={handleChange}
+                                        onChange={(value: any) => handleValueChange(value, 'ownerPhoneNumber')}
                                         errors={errors.ownerPhoneNumber}
-                                        inputProps={{ maxLength: 11 }}
                                     />
                                     <Box display="flex" flexDirection="row" justifyItems="flex-start"
                                         alignItems="center">

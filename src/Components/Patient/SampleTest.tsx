@@ -1,271 +1,339 @@
-import React, { useState, useReducer, useCallback, useEffect } from "react"
-import { makeStyles, Theme } from '@material-ui/core/styles';
+import { Button, Card, CardContent, InputLabel } from "@material-ui/core";
+import CheckCircleOutlineIcon from '@material-ui/icons/CheckCircleOutline';
+import { navigate } from "hookrouter";
+import React, { useReducer, useState } from "react";
 import { useDispatch } from "react-redux";
-import { Grid, Card, CardHeader, CardContent, CardActions, Button, FormControl, InputLabel } from "@material-ui/core";
-import { TextInputField, NativeSelectField, ErrorHelperText, MultilineInputField, } from "../Common/HelperInputFields";
-import { navigate } from 'hookrouter';
+import { SAMPLE_TYPE_CHOICES } from "../../Common/constants";
+import { createSampleTest } from "../../Redux/actions";
+import * as Notification from "../../Utils/Notifications.js";
+import { CheckboxField, MultilineInputField, SelectField, TextInputField } from "../Common/HelperInputFields";
 import { Loading } from "../Common/Loading";
-import { SAMPLE_TEST_STATUS, SAMPLE_TEST_RESULT } from "../../Common/constants";
-import { createSampleTest, getSampleTest, patchSampleTest } from "../../Redux/actions";
-import { useAbortableEffect, statusType } from '../../Common/utils';
-import * as Notification from '../../Utils/Notifications.js';
+import PageTitle from "../Common/PageTitle";
+import { SampleTestModel } from "./models";
 
+const sampleTestTypes = [...SAMPLE_TYPE_CHOICES];
 
-const initForm: any = {
-    status: "",
-    result: "",
-    notes: "",
-    consultation: "",
+const initForm: SampleTestModel = {
+  isFastTrack: false,
+  fast_track: "",
+  notes: "",
+  atypical_presentation: "",
+  diagnosis: "",
+  diff_diagnosis: "",
+  doctor_name: "",
+  etiology_identified: "",
+  has_ari: false,
+  has_sari: false,
+  is_atypical_presentation: false,
+  is_unusual_course: false,
+  sample_type: "UNKNOWN",
+  sample_type_other: "",
 };
+
+const initError = Object.assign({}, ...Object.keys(initForm).map(k => ({ [k]: "" })));
 
 const initialState = {
-    form: { ...initForm },
-    errors: { ...initForm }
+  form: { ...initForm },
+  errors: { ...initError }
 };
-
-const optionalFields = [
-    "status",
-    "result",
-    "notes"
-];
-
 
 const sampleTestFormReducer = (state = initialState, action: any) => {
-    switch (action.type) {
-        case "set_form": {
-            return {
-                ...state,
-                form: action.form
-            }
-        }
-        case "set_error": {
-            return {
-                ...state,
-                errors: action.errors
-            }
-        }
-        default:
-            return state
+  switch (action.type) {
+    case "set_form": {
+      return {
+        ...state,
+        form: action.form
+      };
     }
+    case "set_error": {
+      return {
+        ...state,
+        errors: action.errors
+      };
+    }
+    default:
+      return state;
+  }
 };
 
-
-
-const useStyles = makeStyles((theme: Theme) => ({
-    formControl: {
-        margin: theme.spacing(1)
-    },
-    selectLabel: {
-        background: 'white',
-        padding: '2px 10px'
-    },
-
-}));
-
-const statusTypes = [{
-    id: 0,
-    text: 'Select',
-}, ...SAMPLE_TEST_STATUS]
-
-const resultTypes = [{
-    id: 0,
-    text: 'Select',
-}, ...SAMPLE_TEST_RESULT]
-
-
 export const SampleTest = (props: any) => {
-    const classes = useStyles();
-    const dispatchAction: any = useDispatch();
-    const { facilityId, patientId, id } = props;
-    const [state, dispatch] = useReducer(sampleTestFormReducer, initialState);
-    const [isLoading, setIsLoading] = useState(false);
+  const dispatchAction: any = useDispatch();
+  const { facilityId, patientId } = props;
+  const [state, dispatch] = useReducer(sampleTestFormReducer, initialState);
+  const [isLoading, setIsLoading] = useState(false);
 
+  const headerText = "Request Sample";
+  const buttonText = "Confirm your request to send sample for testing";
 
-    const headerText = !id ? "Add Sample Test" : "Edit Sample Test";
-    const buttonText = !id ? "Save" : "Update";
-
-    const fetchData = useCallback(async (status: statusType) => {
-        if (id) {
-            setIsLoading(true);
-            const res = await dispatchAction(getSampleTest(id, { patientId, id }));
-            if (!status.aborted) {
-                if (res && res.data) {
-                    dispatch({
-                        type: "set_form",
-                        form: {
-                            status: res.data.status,
-                            result: res.data.result,
-                            notes: res.data.result,
-                            consultation: res.data.consultation,
-                        }
-                    })
-                } else {
-                    navigate(`/facility/${facilityId}/patient/${patientId}`);
-                }
-            }
-        }
-        setIsLoading(false);
-    }, [dispatchAction, facilityId, patientId, id]);
-
-    useAbortableEffect((status: statusType) => {
-        fetchData(status);
-    }, [dispatch, fetchData, patientId, id]);
-
-
-
-    const validateForm = () => {
-        let errors = { ...initForm };
-        let invalidForm = false;
-        Object.keys(state.form).forEach((field, i) => {
-            if ((optionalFields.indexOf(field) === -1) && !state.form[field]) {
-                errors[field] = "Field is required";
-                invalidForm = true;
-            }
-        });
-        if (invalidForm) {
-            dispatch({ type: "set_error", errors });
-            return false
-        }
-        dispatch({ type: "set_error", errors });
-        return true
-    };
-
-    const handleSubmit = async (e: any) => {
-        e.preventDefault();
-        const validForm = validateForm();
-        if (validForm) {
-            setIsLoading(true);
-            const data = {
-                "status": Number(state.form.status),
-                "result": Number(state.form.result),
-                "notes": state.form.notes,
-                "consultation": Number(state.form.consultation),
-            };
-
-            const res = await dispatchAction(id ? patchSampleTest(id, data, { patientId }) : createSampleTest(data, { id, patientId }));
-            setIsLoading(false);
-            if (res && res.data) {
-                dispatch({ type: "set_form", form: initForm })
-                if (id) {
-                    Notification.Success({
-                        msg: "Sample test updated successfully"
-                    });
-                } else {
-                    Notification.Success({
-                        msg: "Sample test created successfully"
-                    });
-                    navigate(`/facility/${facilityId}/patient/${patientId}`);
-                }
-            } else {
-                Notification.Error({
-                    msg: "Error"
-                });
-            }
-        }
-    };
-
-    const handleChange = (e: any) => {
-        let form = { ...state.form };
-        form[e.target.name] = e.target.value;
-        dispatch({ type: "set_form", form })
-    };
-
-    const handleCancel = () => {
-        navigate(`/facility/${facilityId}`);
-    };
-
-
-    if (isLoading) {
-        return <Loading />
+  const validateForm = () => {
+    let errors = { ...initError };
+    let invalidForm = false;
+    Object.keys(state.form).forEach((field, i) => {
+      switch (field) {
+        case "fast_track":
+          if (state.form.isFastTrack && !state.form[field]) {
+            errors[field] = "Please provide reasons for fast-track testing";
+            invalidForm = true;
+          }
+          break;
+        case "sample_type_other":
+          if (state.form.sample_type === 'OTHER TYPE' && !state.form[field]) {
+            errors[field] = "Please provide details of the sample type";
+            invalidForm = true;
+          }
+          break;
+        case "atypical_presentation":
+          if (state.form.is_atypical_presentation && !state.form[field]) {
+            errors[field] = "Please provide details of atypical presentation";
+            invalidForm = true;
+          }
+          break;
+        default:
+          return;
+      }
+    });
+    if (invalidForm) {
+      dispatch({ type: "set_error", errors });
+      return false;
     }
+    dispatch({ type: "set_error", errors });
+    return true;
+  };
 
-    return <div>
-        <Grid container alignContent="center" justify="center">
-            <Grid item xs={12} sm={10} md={8} lg={6} xl={4}>
-                <Card>
-                    <CardHeader title={headerText} />
-                    <form onSubmit={(e) => handleSubmit(e)}>
-                        <CardContent>
-                            <InputLabel id="demo-simple-select-outlined-label">Status</InputLabel>
-                            <NativeSelectField
-                                name="status"
-                                variant="outlined"
-                                value={state.form.status}
-                                options={statusTypes}
-                                onChange={handleChange}
-                            />
-                            <ErrorHelperText
-                                error={state.errors.status}
-                            />
-                        </CardContent>
+  const handleSubmit = async (e: any) => {
+    e.preventDefault();
+    const validForm = validateForm();
+    if (validForm) {
+      setIsLoading(true);
+      const data: SampleTestModel = {
+        fast_track: state.form.isFastTrack ? state.form.fast_track : undefined,
+        notes: state.form.notes ? state.form.notes : undefined,
+        facility: facilityId,
+        patient: patientId,
+        has_ari: state.form.has_ari,
+        has_sari: state.form.has_sari,
+        is_unusual_course: state.form.is_unusual_course,
+        is_atypical_presentation: state.form.is_atypical_presentation,
+        atypical_presentation: state.form.is_atypical_presentation ? state.form.atypical_presentation : undefined,
+        diagnosis: state.form.diagnosis ? state.form.diagnosis : undefined,
+        diff_diagnosis: state.form.diff_diagnosis ? state.form.diff_diagnosis : undefined,
+        doctor_name: state.form.doctor_name ? state.form.doctor_name : undefined,
+        etiology_identified: state.form.etiology_identified ? state.form.etiology_identified : undefined,
+        sample_type: state.form.sample_type,
+        sample_type_other: state.form.sample_type === 'OTHER TYPE' ? state.form.sample_type_other : undefined,
+      };
+      const res = await dispatchAction(createSampleTest(data, { patientId }));
+      setIsLoading(false);
+      if (res && res.data) {
+        dispatch({ type: "set_form", form: initForm });
+        Notification.Success({
+          msg: "Sample test created successfully"
+        });
+        navigate(`/facility/${facilityId}/patient/${patientId}`);
+      }
+    }
+  };
 
-                        <CardContent>
-                            <InputLabel id="demo-simple-select-outlined-label">Result</InputLabel>
-                            <NativeSelectField
-                                name="result"
-                                variant="outlined"
-                                value={state.form.result}
-                                options={resultTypes}
-                                onChange={handleChange}
-                                disabled={!!id}
-                            />
-                            <ErrorHelperText
-                                error={state.errors.result}
-                            />
-                        </CardContent>
+  const handleChange = (e: any) => {
+    const form = { ...state.form };
+    form[e.target.name] = e.target.value;
+    dispatch({ type: "set_form", form });
+  };
 
-                        <CardContent>
-                            <InputLabel id="med-history-details-label">Notes</InputLabel>
-                            <MultilineInputField
-                                rows={5}
-                                name="notes"
-                                variant="outlined"
-                                margin="dense"
-                                type="text"
-                                InputLabelProps={{ shrink: !!state.form.notes }}
-                                value={state.form.notes}
-                                onChange={handleChange}
-                                errors={state.errors.notes}
-                            />
-                        </CardContent>
+  const handleCheckboxFieldChange = (e: any) => {
+    const form = { ...state.form };
+    const { checked, name } = e.target;
+    form[name] = checked;
+    dispatch({ type: "set_form", form });
+  };
 
-                        <CardContent>
-                            <InputLabel id="age-label">Sample Number*</InputLabel>
-                            <TextInputField
-                                defaultValue={"1"}
-                                name="consultation"
-                                variant="outlined"
-                                margin="dense"
-                                type="number"
-                                InputLabelProps={{ shrink: !!state.form.consultation }}
-                                value={state.form.consultation}
-                                onChange={handleChange}
-                                errors={state.errors.consultation}
-                            />
-                        </CardContent>
+  const goBack = () => {
+    window.history.go(-1);
+  };
 
+  if (isLoading) {
+    return <Loading />;
+  }
 
-                        <CardActions className="padding16" style={{ justifyContent: "space-between" }}>
-                            <Button
-                                color="default"
-                                variant="contained"
-                                type="button"
-                                onClick={(e) => handleCancel()}
-                            >Cancel</Button>
-                            <Button
-                                color="primary"
-                                variant="contained"
-                                type="submit"
-                                style={{ marginLeft: 'auto' }}
-                                onClick={(e) => handleSubmit(e)}
-                            >
-                                {buttonText}
-                            </Button>
-                        </CardActions>
-                    </form>
-                </Card>
+  return (
+    <div>
+      <PageTitle title={headerText} />
+      <div className="mt-4">
+        <Card>
+          <CardContent>
+            <form onSubmit={e => handleSubmit(e)}>
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                <div>
+                  <InputLabel>Sample Test Type*</InputLabel>
+                  <SelectField
+                    name="sample_type"
+                    variant="outlined"
+                    margin="dense"
+                    optionArray={true}
+                    value={state.form.sample_type}
+                    options={sampleTestTypes}
+                    onChange={handleChange}
+                    errors={state.errors.sample_type}
+                  />
+                </div>
+                <div className="flex items-center">
+                  <CheckboxField
+                    checked={state.form.isFastTrack}
+                    onChange={handleCheckboxFieldChange}
+                    name="isFastTrack"
+                    label="Is fast-track testing required?"
+                  />
+                </div>
+                {state.form.sample_type === 'OTHER TYPE' && (<div>
+                  <InputLabel>Sample Test Type Details*</InputLabel>
+                  <MultilineInputField
+                    rows={4}
+                    name="sample_type_other"
+                    variant="outlined"
+                    margin="dense"
+                    type="text"
+                    value={state.form.sample_type_other}
+                    onChange={handleChange}
+                    errors={state.errors.sample_type_other}
+                  />
+                </div>)}
+                {state.form.isFastTrack && (<div>
+                  <InputLabel>Provide reasons for fast-track testing</InputLabel>
+                  <MultilineInputField
+                    rows={4}
+                    name="fast_track"
+                    variant="outlined"
+                    margin="dense"
+                    type="text"
+                    InputLabelProps={{ shrink: !!state.form.fast_track }}
+                    value={state.form.fast_track}
+                    onChange={handleChange}
+                    errors={state.errors.fast_track}
+                  />
+                </div>)}
+              </div>
+              <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-2">
+                <div>
+                  <InputLabel>Doctor's Name</InputLabel>
+                  <TextInputField
+                    name="doctor_name"
+                    variant="outlined"
+                    margin="dense"
+                    value={state.form.doctor_name}
+                    onChange={handleChange}
+                    errors={state.errors.doctor_name}
+                  />
+                </div>
+                <div className="flex items-center">
+                  <CheckboxField
+                    checked={state.form.is_atypical_presentation}
+                    onChange={handleCheckboxFieldChange}
+                    name="is_atypical_presentation"
+                    label="Is atypical presentation?"
+                  />
+                </div>
+                <div>
+                  <InputLabel>Diagnosis</InputLabel>
+                  <MultilineInputField
+                    rows={4}
+                    name="diagnosis"
+                    variant="outlined"
+                    margin="dense"
+                    type="text"
+                    value={state.form.diagnosis}
+                    onChange={handleChange}
+                    errors={state.errors.diagnosis}
+                  />
+                </div>
+                <div>
+                  <InputLabel>Etiology identified</InputLabel>
+                  <MultilineInputField
+                    rows={4}
+                    name="etiology_identified"
+                    variant="outlined"
+                    margin="dense"
+                    type="text"
+                    value={state.form.etiology_identified}
+                    onChange={handleChange}
+                    errors={state.errors.etiology_identified}
+                  />
+                </div>
+                <div>
+                  <InputLabel>Differential diagnosis</InputLabel>
+                  <MultilineInputField
+                    rows={4}
+                    name="diff_diagnosis"
+                    variant="outlined"
+                    margin="dense"
+                    type="text"
+                    value={state.form.diff_diagnosis}
+                    onChange={handleChange}
+                    errors={state.errors.diff_diagnosis}
+                  />
+                </div>
+                {state.form.is_atypical_presentation && (<div>
+                  <InputLabel>Atypical presentation details*</InputLabel>
+                  <MultilineInputField
+                    rows={4}
+                    name="atypical_presentation"
+                    variant="outlined"
+                    margin="dense"
+                    type="text"
+                    value={state.form.atypical_presentation}
+                    onChange={handleChange}
+                    errors={state.errors.atypical_presentation}
+                  />
+                </div>)}
+              </div>
+              <div className="mt-4 grid gap-4 grid-cols-1 md:grid-cols-2">
+                <div className="flex items-center">
+                  <CheckboxField
+                    checked={state.form.has_sari}
+                    onChange={handleCheckboxFieldChange}
+                    name="has_sari"
+                    label="SARI - Severe Acute Respiratory illness ?"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <CheckboxField
+                    checked={state.form.has_ari}
+                    onChange={handleCheckboxFieldChange}
+                    name="has_ari"
+                    label="ARI - Acute Respiratory illness ?"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <CheckboxField
+                    checked={state.form.is_unusual_course}
+                    onChange={handleCheckboxFieldChange}
+                    name="is_unusual_course"
+                    label="Is unusual course?"
+                  />
+                </div>
+              </div>
+              <div
+                className="flex justify-between mt-4"
+              >
+                <Button
+                  color="default"
+                  variant="contained"
+                  type="button"
+                  onClick={goBack}
+                > Cancel </Button>
+                <Button
+                  color="primary"
+                  variant="contained"
+                  type="submit"
+                  style={{ marginLeft: "auto" }}
+                  startIcon={<CheckCircleOutlineIcon>save</CheckCircleOutlineIcon>}
+                  onClick={e => handleSubmit(e)}
+                > {buttonText} </Button>
+              </div>
 
-            </Grid>
-        </Grid>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
+  );
 };

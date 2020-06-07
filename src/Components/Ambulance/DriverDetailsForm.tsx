@@ -1,29 +1,15 @@
-import React, { useState } from "react";
-import {
-  Box,
-  Button,
-  Card,
-  CardHeader,
-  Grid,
-  CardContent,
-  CardActions,
-  Checkbox,
-  Typography,
-  Switch
-} from "@material-ui/core";
-import { TextInputField, CheckboxField } from "../Common/HelperInputFields";
-import { useDispatch } from "react-redux";
-import { postAmbulance } from "../../Redux/actions";
-import { isEmpty } from "lodash";
+import { Box, Button, Card, CardActions, CardContent, CardHeader, Checkbox, Grid, Switch, Typography } from "@material-ui/core";
+import CheckCircleOutlineIcon from '@material-ui/icons/CheckCircleOutline';
 import { navigate } from "hookrouter";
-import SaveIcon from "@material-ui/icons/Save";
-import {
-  AGREE_CONSENT,
-  AMBULANCE_FREE_SERVICE_CONSENT,
-  AMBULANCE_SERVICE_FEE_TEXT
-} from "../../Common/constants";
-import { vehicleForm } from "./VehicleDetailsForm";
+import { isEmpty } from "lodash";
+import React, { useState } from "react";
+import { useDispatch } from "react-redux";
+import { AGREE_CONSENT, AMBULANCE_FREE_SERVICE_CONSENT, AMBULANCE_SERVICE_FEE_TEXT } from "../../Common/constants";
+import { postAmbulance } from "../../Redux/actions";
 import * as Notification from '../../Utils/Notifications.js';
+import { CheckboxField, TextInputField, PhoneNumberField } from "../Common/HelperInputFields";
+import { vehicleForm } from "./VehicleDetailsForm";
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 interface DriverDetailsProps {
   classes: any;
@@ -90,21 +76,19 @@ export const DriverDetailsForm = (props: DriverDetailsProps) => {
           }
           break;
         case "cellNumber1":
-          if (!value) {
-            err[key] = "This field is required";
-          } else if (value && !/^[0-9]{10}$/.test(form.cellNumber1)) {
-            err[key] = "Invalid phone number";
+          const phoneNumber = parsePhoneNumberFromString(value);
+          if (!value || !phoneNumber?.isPossible()) {
+            err[key] = "Please enter valid phone number";
           }
           break;
         case "cellNumber2":
           if (form.driverName2 && !value) {
             err[key] = "This field is required";
-          } else if (
-            form.driverName2 &&
-            value &&
-            !/^[0-9]{10}$/.test(form.cellNumber2)
-          ) {
-            err[key] = "Invalid phone number";
+          } else if (form.driverName2 && value) {
+            const phoneNumber2 = parsePhoneNumberFromString(value);
+            if (!value || !phoneNumber2?.isPossible()) {
+              err[key] = "Please enter valid phone number";
+            }
           }
           break;
         default:
@@ -125,6 +109,12 @@ export const DriverDetailsForm = (props: DriverDetailsProps) => {
     setDriverObj(formData);
   };
 
+  const handleValueChange = (value: any, name: string) => {
+      const formOld = { ...form };
+      formOld[name] = value;
+      setForm(formOld);
+  };
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     const valid = validateData();
@@ -133,7 +123,7 @@ export const DriverDetailsForm = (props: DriverDetailsProps) => {
         drivers: [
           {
             name: form.driverName1,
-            phone_number: form.cellNumber1,
+            phone_number: parsePhoneNumberFromString(form.cellNumber1)?.format('E.164'),
             is_smart_phone: form.isSmartPhone1
           }
         ],
@@ -144,7 +134,7 @@ export const DriverDetailsForm = (props: DriverDetailsProps) => {
           ? vehicleInfo.vehicleType
           : undefined,
         owner_name: vehicleInfo.nameOfOwner,
-        owner_phone_number: vehicleInfo.ownerPhoneNumber,
+        owner_phone_number: parsePhoneNumberFromString(vehicleInfo.ownerPhoneNumber)?.format('E.164'),
         owner_is_smart_phone: vehicleInfo.isSmartPhone,
         primary_district: vehicleInfo.primaryDistrict
           ? Number(vehicleInfo.primaryDistrict)
@@ -169,7 +159,7 @@ export const DriverDetailsForm = (props: DriverDetailsProps) => {
       if (!!form.driverName2) {
         ambulanceData.drivers.push({
           name: form.driverName2,
-          phone_number: form.cellNumber2,
+          phone_number: parsePhoneNumberFromString(form.cellNumber2)?.format('E.164'),
           is_smart_phone: form.isSmartPhone2
         });
       }
@@ -211,17 +201,11 @@ export const DriverDetailsForm = (props: DriverDetailsProps) => {
                   onChange={handleChange}
                   errors={errors.driverName1}
                 />
-                <TextInputField
-                  name="cellNumber1"
-                  label="Cellphone Number"
-                  placeholder=""
-                  variant="outlined"
-                  margin="dense"
-                  type="number"
-                  value={form.cellNumber1}
-                  onChange={handleChange}
-                  errors={errors.cellNumber1}
-                  inputProps={{ maxLength: 10 }}
+                <PhoneNumberField
+                    label="Cellphone Number"
+                    value={form.cellNumber1}
+                    onChange={(value: any) => handleValueChange(value, 'cellNumber1')}
+                    errors={errors.cellNumber1}
                 />
                 <CheckboxField
                   checked={form.isSmartPhone1}
@@ -240,17 +224,11 @@ export const DriverDetailsForm = (props: DriverDetailsProps) => {
                   onChange={handleChange}
                   errors={errors.driverName2}
                 />
-                <TextInputField
-                  name="cellNumber2"
-                  label="Cellphone Number"
-                  placeholder=""
-                  variant="outlined"
-                  margin="dense"
-                  type="number"
-                  value={form.cellNumber2}
-                  onChange={handleChange}
-                  errors={errors.cellNumber2}
-                  inputProps={{ maxLength: 10 }}
+                <PhoneNumberField
+                    label="Cellphone Number"
+                    value={form.cellNumber2}
+                    onChange={(value: any) => handleValueChange(value, 'cellNumber2')}
+                    errors={errors.cellNumber2}
                 />
                 <Box>
                   <CheckboxField
@@ -306,10 +284,10 @@ export const DriverDetailsForm = (props: DriverDetailsProps) => {
                   variant="contained"
                   type="submit"
                   onClick={e => handleSubmit(e)}
-                  startIcon={<SaveIcon>save</SaveIcon>}
+                  startIcon={<CheckCircleOutlineIcon>save</CheckCircleOutlineIcon>}
                   disabled={!form.agreeConsent || isLoading}
                 >
-                  Save Details
+                  Add Ambulance
                 </Button>
               </CardActions>
             </form>
